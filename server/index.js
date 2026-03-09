@@ -13,8 +13,10 @@ const DATA_FILE = path.join(__dirname, 'notes.json');
 app.use(cors());
 app.use(express.json());
 
-// --- Persistence Helper ---
-// This function writes the current 'notes' array to the physical notes.json file
+/**
+ * --- PERSISTENCE HELPER ---
+ * Writes the current 'notes' array to the notes.json file.
+ */
 const save = () => {
   try {
     fs.writeFileSync(DATA_FILE, JSON.stringify(notes, null, 2), 'utf8');
@@ -23,20 +25,39 @@ const save = () => {
   }
 };
 
-// --- Initial Data Load ---
-// Loads notes from the file on startup, or starts with an empty list
-let notes = fs.existsSync(DATA_FILE) 
-  ? JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')) 
-  : [];
+/**
+ * --- INITIAL DATA LOAD ---
+ * Loads existing notes from disk or starts with a welcome note.
+ */
+let notes = [];
+if (fs.existsSync(DATA_FILE)) {
+  try {
+    const data = fs.readFileSync(DATA_FILE, 'utf8');
+    notes = data ? JSON.parse(data) : [];
+  } catch (err) {
+    console.error("Error parsing notes.json, starting with empty list.");
+    notes = [];
+  }
+} else {
+  // Optional: Start with a welcome note if the file is missing
+  notes = [
+    { id: uuidv4(), title: 'Welcome!', body: 'Try the AI Prep feature on this note!', author: 'system', createdAt: new Date().toISOString() }
+  ];
+  save();
+}
 
-// --- AI Configuration ---
+/**
+ * --- AI CONFIGURATION ---
+ */
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// --- API Routes ---
+/**
+ * --- API ROUTES ---
+ */
 
 // GET: Retrieve all notes
 app.get('/api/notes', (req, res) => {
-  res.json(notes.slice().reverse()); // newest first
+  res.json(notes.slice().reverse()); // Show newest first
 });
 
 // POST: Create a new note
@@ -53,7 +74,7 @@ app.post('/api/notes', (req, res) => {
   };
 
   notes.push(note);
-  save(); // Persist changes to notes.json
+  save(); // Persist changes
   res.status(201).json(note);
 });
 
@@ -66,7 +87,7 @@ app.delete('/api/notes/:id', (req, res) => {
     return res.status(404).json({ error: 'Not found' });
   }
 
-  save(); // Persist changes to notes.json
+  save(); // Persist changes
   res.json({ ok: true });
 });
 
@@ -80,7 +101,7 @@ app.patch('/api/notes/:id', (req, res) => {
   if (body !== undefined) note.body = body.trim();
   note.updatedAt = new Date().toISOString();
 
-  save(); // Persist changes to notes.json
+  save(); // Persist changes
   res.json(note);
 });
 
