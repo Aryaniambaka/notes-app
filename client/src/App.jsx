@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 
-// Centralized API configuration
-const API = "http://localhost:3001/api";
+// Centralized API configuration (env override for dev)
+const API = import.meta.env.VITE_API_BASE || "http://localhost:3001/api";
 
 /**
  * Helper to generate relative time strings

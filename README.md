@@ -35,7 +35,7 @@ Open http://localhost:3000
 
 ### Deploying quickly
 1. **Backend**: create a free app on Heroku or Railway, set `GEMINI_API_KEY` in config vars, and deploy the `server/` folder (Procfile: `web: node index.js`).
-2. **Frontend**: point Vercel/Netlify at the `client/` directory; update the proxy or API_BASE if necessary. 
+2. **Frontend**: point Vercel/Netlify at the `client/` directory; update the proxy or API_BASE if necessary. Local development uses `VITE_API_BASE` (or `BACKEND_URL` for proxy) to point at the server when it's not running on the default port. e.g. `VITE_API_BASE=http://localhost:3002` before `npm run dev`.
 3. If you don’t have a key, the app still runs thanks to stub AI responses (see API docs above).
 
 For hackathon submission, capture a live demo link or screen recording and include it in your entry.

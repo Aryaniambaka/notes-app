@@ -6,7 +6,8 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
-      '/api': 'http://localhost:3001'
+      // proxy to whichever port the backend is running on (override with env if needed)
+      '/api': process.env.BACKEND_URL || 'http://localhost:3002'
     }
   }
 })
