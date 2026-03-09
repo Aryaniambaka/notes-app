@@ -55,5 +55,31 @@ app.patch('/api/notes/:id', (req, res) => {
   note.updatedAt = new Date().toISOString();
   res.json(note);
 });
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+require('dotenv').config();
+
+// Initialize Gemini (Ensure you have GEMINI_API_KEY in your server/.env)
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// AI Summarization Route
+app.post('/api/notes/:id/summarize', async (req, res) => {
+  const note = notes.find(n => n.id === req.params.id);
+  if (!note) return res.status(404).json({ error: 'Note not found' });
+
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const prompt = `You are an academic assistant. Analyze the following student note and provide:
+    1. A 5-bullet point concise summary.
+    2. Three potential exam questions based on this content.
+    Note Content: "${note.body}"`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    res.json({ summary: response.text() });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'AI generation failed. Check API key.' });
+  }
+});
 
 app.listen(PORT, () => console.log(`Notes API running on http://localhost:${PORT}`));

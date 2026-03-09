@@ -1,6 +1,25 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=DM+Sans:wght@300;400;500&display=swap');
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+.ai-btn {
+  background: #6366f1; /* Indigo color */
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  cursor: pointer;
+  font-family: 'DM Mono', monospace;
+}
+
+.ai-summary-box {
+  background: #f0f4ff;
+  border-left: 3px solid #6366f1;
+  padding: 8px;
+  margin-top: 10px;
+  border-radius: 4px;
+  color: #312e81;
+}
 
 :root {
   --bg: #f5f2ed;

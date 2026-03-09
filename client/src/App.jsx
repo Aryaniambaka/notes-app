@@ -1,7 +1,49 @@
 import { useState, useEffect, useCallback } from "react";
 
 const API = "http://localhost:3001/api";
+function NoteCard({ note, onDelete }) {
+  const [summary, setSummary] = useState("");
+  const [loading, setLoading] = useState(false);
 
+  const handleSummarize = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`http://localhost:3001/api/notes/${note.id}/summarize`, { method: "POST" });
+      const data = await res.json();
+      setSummary(data.summary);
+    } catch {
+      alert("AI Service Unavailable");
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="note-card">
+      <div className="note-header">
+        <span className="note-title">{note.title}</span>
+        <div style={{ display: 'flex', gap: '5px' }}>
+          <button className="ai-btn" onClick={handleSummarize} disabled={loading}>
+            {loading ? "..." : "✨ Prep"}
+          </button>
+          <button className="delete-btn" onClick={() => onDelete(note.id)}>×</button>
+        </div>
+      </div>
+      <p className="note-body">{note.body}</p>
+      
+      {summary && (
+        <div className="ai-summary-box">
+          <strong>AI Exam Prep:</strong>
+          <p style={{ whiteSpace: 'pre-wrap', fontSize: '0.8rem' }}>{summary}</p>
+        </div>
+      )}
+
+      <div className="note-meta">
+        <span className="note-author">— {note.author}</span>
+        <span className="note-time">{timeAgo(note.createdAt)}</span>
+      </div>
+    </div>
+  );
+}
 function timeAgo(iso) {
   const diff = (Date.now() - new Date(iso)) / 1000;
   if (diff < 60) return "just now";
