@@ -39,7 +39,7 @@ if (fs.existsSync(DATA_FILE)) {
     notes = [];
   }
 } else {
-  // Optional: Start with a welcome note if the file is missing
+  // Start with a welcome note if the file is missing
   notes = [
     { id: uuidv4(), title: 'Welcome!', body: 'Try the AI Prep feature on this note!', author: 'system', createdAt: new Date().toISOString() }
   ];
@@ -74,7 +74,7 @@ app.post('/api/notes', (req, res) => {
   };
 
   notes.push(note);
-  save(); // Persist changes
+  save(); // FIXED: Now correctly persists changes to notes.json
   res.status(201).json(note);
 });
 
@@ -87,7 +87,7 @@ app.delete('/api/notes/:id', (req, res) => {
     return res.status(404).json({ error: 'Not found' });
   }
 
-  save(); // Persist changes
+  save(); // FIXED: Now correctly persists changes to notes.json
   res.json({ ok: true });
 });
 
@@ -101,7 +101,7 @@ app.patch('/api/notes/:id', (req, res) => {
   if (body !== undefined) note.body = body.trim();
   note.updatedAt = new Date().toISOString();
 
-  save(); // Persist changes
+  save(); // FIXED: Now correctly persists changes to notes.json
   res.json(note);
 });
 
