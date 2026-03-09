@@ -52,21 +52,7 @@ function timeAgo(iso) {
   return new Date(iso).toLocaleDateString();
 }
 
-function NoteCard({ note, onDelete }) {
-  return (
-    <div className="note-card">
-      <div className="note-header">
-        <span className="note-title">{note.title}</span>
-        <button className="delete-btn" onClick={() => onDelete(note.id)} title="Delete">×</button>
-      </div>
-      <p className="note-body">{note.body}</p>
-      <div className="note-meta">
-        <span className="note-author">— {note.author}</span>
-        <span className="note-time">{timeAgo(note.createdAt)}</span>
-      </div>
-    </div>
-  );
-}
+
 
 function AddNoteForm({ onAdd }) {
   const [title, setTitle] = useState("");

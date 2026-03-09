@@ -1,26 +1,45 @@
 const express = require('express');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
+const fs = require('fs');
+const path = require('path');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+require('dotenv').config();
 
 const app = express();
 const PORT = 3001;
+const DATA_FILE = path.join(__dirname, 'notes.json');
 
 app.use(cors());
 app.use(express.json());
 
-// --- In-memory store (swap for a DB later) ---
-let notes = [
-  { id: uuidv4(), title: 'Welcome!', body: 'This is a shared notes board. Add your own notes below.', author: 'system', createdAt: new Date().toISOString() },
-];
+// --- Persistence Helper ---
+// This function writes the current 'notes' array to the physical notes.json file
+const save = () => {
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(notes, null, 2), 'utf8');
+  } catch (err) {
+    console.error("Failed to save notes to file:", err);
+  }
+};
 
-// --- Routes ---
+// --- Initial Data Load ---
+// Loads notes from the file on startup, or starts with an empty list
+let notes = fs.existsSync(DATA_FILE) 
+  ? JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')) 
+  : [];
 
-// GET all notes
+// --- AI Configuration ---
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// --- API Routes ---
+
+// GET: Retrieve all notes
 app.get('/api/notes', (req, res) => {
   res.json(notes.slice().reverse()); // newest first
 });
 
-// POST a new note
+// POST: Create a new note
 app.post('/api/notes', (req, res) => {
   const { title, body, author } = req.body;
   if (!body?.trim()) return res.status(400).json({ error: 'Body is required' });
@@ -34,34 +53,38 @@ app.post('/api/notes', (req, res) => {
   };
 
   notes.push(note);
+  save(); // Persist changes to notes.json
   res.status(201).json(note);
 });
 
-// DELETE a note
+// DELETE: Remove a note by ID
 app.delete('/api/notes/:id', (req, res) => {
   const before = notes.length;
   notes = notes.filter(n => n.id !== req.params.id);
-  if (notes.length === before) return res.status(404).json({ error: 'Not found' });
+  
+  if (notes.length === before) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+
+  save(); // Persist changes to notes.json
   res.json({ ok: true });
 });
 
-// PATCH (edit) a note
+// PATCH: Update an existing note
 app.patch('/api/notes/:id', (req, res) => {
   const note = notes.find(n => n.id === req.params.id);
   if (!note) return res.status(404).json({ error: 'Not found' });
+
   const { title, body } = req.body;
   if (title !== undefined) note.title = title.trim();
   if (body !== undefined) note.body = body.trim();
   note.updatedAt = new Date().toISOString();
+
+  save(); // Persist changes to notes.json
   res.json(note);
 });
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-require('dotenv').config();
 
-// Initialize Gemini (Ensure you have GEMINI_API_KEY in your server/.env)
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-// AI Summarization Route
+// POST: AI Summarization and Exam Prep
 app.post('/api/notes/:id/summarize', async (req, res) => {
   const note = notes.find(n => n.id === req.params.id);
   if (!note) return res.status(404).json({ error: 'Note not found' });
@@ -77,9 +100,11 @@ app.post('/api/notes/:id/summarize', async (req, res) => {
     const response = await result.response;
     res.json({ summary: response.text() });
   } catch (error) {
-    console.error(error);
+    console.error("Gemini AI Error:", error);
     res.status(500).json({ error: 'AI generation failed. Check API key.' });
   }
 });
 
-app.listen(PORT, () => console.log(`Notes API running on http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`🚀 Notes API running on http://localhost:${PORT}`);
+});
