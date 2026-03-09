@@ -1,131 +1,138 @@
 const express = require('express');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
-const fs = require('fs');
-const path = require('path');
+const fs = require('fs'); // Added for persistence
+const path = require('path'); // Added for persistence
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 require('dotenv').config();
 
 const app = express();
-const PORT = 3001;
+// allow overriding port (e.g. when 3001 is already in use by VS Code or other service)
+const PORT = process.env.PORT || 3001;
 const DATA_FILE = path.join(__dirname, 'notes.json');
 
 app.use(cors());
 app.use(express.json());
 
-/**
- * --- PERSISTENCE HELPER ---
- * Writes the current 'notes' array to the notes.json file.
- */
+// --- Persistence Helper ---
 const save = () => {
-  try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(notes, null, 2), 'utf8');
-  } catch (err) {
-    console.error("Failed to save notes to file:", err);
-  }
+  fs.writeFileSync(DATA_FILE, JSON.stringify(notes, null, 2));
 };
 
-/**
- * --- INITIAL DATA LOAD ---
- * Loads existing notes from disk or starts with a welcome note.
- */
-let notes = [];
-if (fs.existsSync(DATA_FILE)) {
-  try {
-    const data = fs.readFileSync(DATA_FILE, 'utf8');
-    notes = data ? JSON.parse(data) : [];
-  } catch (err) {
-    console.error("Error parsing notes.json, starting with empty list.");
-    notes = [];
-  }
+// Initial Data Load from file
+let notes = fs.existsSync(DATA_FILE) 
+  ? JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')) 
+  : [{ id: uuidv4(), title: 'Welcome!', body: 'Try AI Prep!', author: 'system', createdAt: new Date().toISOString() }];
+
+const apiKey = process.env.GEMINI_API_KEY;
+let genAI;
+if (apiKey) {
+  genAI = new GoogleGenerativeAI(apiKey);
 } else {
-  // Start with a welcome note if the file is missing
-  notes = [
-    { id: uuidv4(), title: 'Welcome!', body: 'Try the AI Prep feature on this note!', author: 'system', createdAt: new Date().toISOString() }
-  ];
-  save();
+  console.warn('Warning: GEMINI_API_KEY not set; AI endpoints will return stub text.');
+  genAI = null;
 }
 
-/**
- * --- AI CONFIGURATION ---
- */
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-/**
- * --- API ROUTES ---
- */
-
-// GET: Retrieve all notes
+// --- Routes ---
 app.get('/api/notes', (req, res) => {
-  res.json(notes.slice().reverse()); // Show newest first
+  // support simple search and tag filters
+  let results = notes.slice().reverse();
+  const { q, tags } = req.query;
+  if (q) {
+    const term = q.toLowerCase();
+    results = results.filter(n =>
+      n.title.toLowerCase().includes(term) || n.body.toLowerCase().includes(term)
+    );
+  }
+  if (tags) {
+    // allow comma-separated list
+    const tagList = tags.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+    if (tagList.length) {
+      results = results.filter(n =>
+        n.tags && n.tags.some(t => tagList.includes(t.toLowerCase()))
+      );
+    }
+  }
+  res.json(results);
 });
 
-// POST: Create a new note
 app.post('/api/notes', (req, res) => {
-  const { title, body, author } = req.body;
+  const { title, body, author, tags } = req.body;
   if (!body?.trim()) return res.status(400).json({ error: 'Body is required' });
-
   const note = {
     id: uuidv4(),
     title: title?.trim() || 'Untitled',
     body: body.trim(),
     author: author?.trim() || 'anonymous',
+    tags: Array.isArray(tags) ? tags : [],
     createdAt: new Date().toISOString(),
   };
-
   notes.push(note);
-  save(); // FIXED: Now correctly persists changes to notes.json
+  save(); // Save to file
   res.status(201).json(note);
 });
 
-// DELETE: Remove a note by ID
 app.delete('/api/notes/:id', (req, res) => {
-  const before = notes.length;
   notes = notes.filter(n => n.id !== req.params.id);
-  
-  if (notes.length === before) {
-    return res.status(404).json({ error: 'Not found' });
-  }
-
-  save(); // FIXED: Now correctly persists changes to notes.json
+  save(); // Save change
   res.json({ ok: true });
 });
 
-// PATCH: Update an existing note
 app.patch('/api/notes/:id', (req, res) => {
-  const note = notes.find(n => n.id === req.params.id);
-  if (!note) return res.status(404).json({ error: 'Not found' });
-
-  const { title, body } = req.body;
-  if (title !== undefined) note.title = title.trim();
+  const index = notes.findIndex(n => n.id === req.params.id);
+  if (index === -1) return res.status(404).json({ error: 'Not found' });
+  const { title, body, author, tags } = req.body;
+  if (body !== undefined && !body.trim()) {
+    return res.status(400).json({ error: 'Body cannot be empty' });
+  }
+  const note = notes[index];
+  if (title !== undefined) note.title = title.trim() || 'Untitled';
   if (body !== undefined) note.body = body.trim();
-  note.updatedAt = new Date().toISOString();
-
-  save(); // FIXED: Now correctly persists changes to notes.json
+  if (author !== undefined) note.author = author.trim();
+  if (tags !== undefined) note.tags = Array.isArray(tags) ? tags : note.tags;
+  notes[index] = note;
+  save();
   res.json(note);
 });
 
-// POST: AI Summarization and Exam Prep
+
+
 app.post('/api/notes/:id/summarize', async (req, res) => {
   const note = notes.find(n => n.id === req.params.id);
-  if (!note) return res.status(404).json({ error: 'Note not found' });
-
+  if (!note) return res.status(404).json({ error: 'Not found' });
   try {
+    if (!genAI) {
+      return res.json({ summary: `• (sample) Your text discusses something important.\n
+Sample questions:\n1. What is the topic?\n2. List one detail.` });
+    }
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const prompt = `You are an academic assistant. Analyze the following student note and provide:
-    1. A 5-bullet point concise summary.
-    2. Three potential exam questions based on this content.
-    Note Content: "${note.body}"`;
-
+    const prompt = `Provide a 5-bullet summary and 3 exam questions for: "${note.body}"`;
     const result = await model.generateContent(prompt);
-    const response = await result.response;
-    res.json({ summary: response.text() });
+    res.json({ summary: result.response.text() });
   } catch (error) {
-    console.error("Gemini AI Error:", error);
-    res.status(500).json({ error: 'AI generation failed. Check API key.' });
+    console.error(error);
+    res.status(500).json({ error: 'AI Error' });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Notes API running on http://localhost:${PORT}`);
+
+// --- New quiz route ---
+app.post('/api/notes/:id/quiz', async (req, res) => {
+  const note = notes.find(n => n.id === req.params.id);
+  if (!note) return res.status(404).json({ error: 'Not found' });
+  try {
+    if (!genAI) {
+      // stub response for demos
+      return res.json({ quiz: `1. What is the main idea of the text?\n2. Name two key points mentioned.` });
+    }
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const prompt = `Create 5 short-answer or multiple-choice quiz questions for the following text: "${note.body}"`;
+    const result = await model.generateContent(prompt);
+    res.json({ quiz: result.response.text() });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'AI Error' });
+  }
 });
+
+app.listen(PORT, () => console.log(`🚀 API running on http://localhost:${PORT} (env PORT=${process.env.PORT || ''})`));
